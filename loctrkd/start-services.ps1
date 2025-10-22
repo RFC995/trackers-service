@@ -1,6 +1,6 @@
-# Script para iniciar todos os serviÃ§os do loctrkd
+# Script para iniciar todos os serviços do loctrkd
 $configPath = Join-Path $PSScriptRoot "loctrkd.conf"
-Write-Host "Usando arquivo de configuraÃ§Ã£o: $configPath"
+Write-Host "Usando arquivo de configuração: $configPath"
 Write-Host "Porta do collector configurada para: 5023"
 
 $services = @(
@@ -13,7 +13,7 @@ $services = @(
 
 foreach ($service in $services) {
     Write-Host "Iniciando $service..."
-    Start-Process powershell -ArgumentList "-Command", "python -m $service -c `"$configPath`""
+    Start-Process powershell -ArgumentList "-Command", "python -m $service -c "$configPath""
 }
 
-Write-Host "Todos os serviÃ§os foram iniciados!"
+Write-Host "Todos os serviços foram iniciados!"

@@ -1,7 +1,7 @@
-# Script para verificar se os servi√ßos est√£o em execu√ß√£o
-# Verifica processos Python que est√£o executando os m√≥dulos loctrkd
+# Script para verificar se os serviÁos est„o em execuÁ„o
+# Verifica processos Python que est„o executando os mÛdulos loctrkd
 
-Write-Host "Verificando servi√ßos loctrkd em execu√ß√£o..." -ForegroundColor Cyan
+Write-Host "Verificando serviÁos loctrkd em execuÁ„o..." -ForegroundColor Cyan
 Write-Host "----------------------------------------" -ForegroundColor Cyan
 
 $services = @(
@@ -17,36 +17,36 @@ $runningCount = 0
 foreach ($service in $services) {
     $processes = Get-Process python -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*$service*" }
     if ($processes) {
-        Write-Host "‚úì $service est√° em execu√ß√£o" -ForegroundColor Green
+        Write-Host " $service est· em execuÁ„o" -ForegroundColor Green
         $runningCount++
     } else {
-        Write-Host "‚úó $service N√ÉO est√° em execu√ß√£o" -ForegroundColor Red
+        Write-Host " $service N√O est· em execuÁ„o" -ForegroundColor Red
     }
 }
 
 Write-Host "----------------------------------------" -ForegroundColor Cyan
-Write-Host "$runningCount de 5 servi√ßos em execu√ß√£o" -ForegroundColor $(if ($runningCount -eq 5) { "Green" } else { "Yellow" })
+Write-Host "$runningCount de 5 serviÁos em execuÁ„o" -ForegroundColor $(if ($runningCount -eq 5) { "Green" } else { "Yellow" })
 
-# Verificar se a porta 5023 est√° em uso (porta do collector)
+# Verificar se a porta 5023 est· em uso (porta do collector)
 try {
     $portCheck = Get-NetTCPConnection -LocalPort 5023 -ErrorAction SilentlyContinue
     if ($portCheck) {
-        Write-Host "‚úì A porta 5023 est√° aberta e em uso (Collector)" -ForegroundColor Green
+        Write-Host " A porta 5023 est· aberta e em uso (Collector)" -ForegroundColor Green
     } else {
-        Write-Host "‚úó A porta 5023 N√ÉO est√° em uso! O collector pode n√£o estar funcionando corretamente." -ForegroundColor Red
+        Write-Host " A porta 5023 N√O est· em uso! O collector pode n„o estar funcionando corretamente." -ForegroundColor Red
     }
 } catch {
-    Write-Host "‚úó N√£o foi poss√≠vel verificar a porta 5023" -ForegroundColor Red
+    Write-Host " N„o foi possÌvel verificar a porta 5023" -ForegroundColor Red
 }
 
-# Verificar se a porta 5049 est√° em uso (porta do wsgateway)
+# Verificar se a porta 5049 est· em uso (porta do wsgateway)
 try {
     $portCheck = Get-NetTCPConnection -LocalPort 5049 -ErrorAction SilentlyContinue
     if ($portCheck) {
-        Write-Host "‚úì A porta 5049 est√° aberta e em uso (WebSocket Gateway)" -ForegroundColor Green
+        Write-Host " A porta 5049 est· aberta e em uso (WebSocket Gateway)" -ForegroundColor Green
     } else {
-        Write-Host "‚úó A porta 5049 N√ÉO est√° em uso! O wsgateway pode n√£o estar funcionando corretamente." -ForegroundColor Red
+        Write-Host " A porta 5049 N√O est· em uso! O wsgateway pode n„o estar funcionando corretamente." -ForegroundColor Red
     }
 } catch {
-    Write-Host "‚úó N√£o foi poss√≠vel verificar a porta 5049" -ForegroundColor Red
+    Write-Host " N„o foi possÌvel verificar a porta 5049" -ForegroundColor Red
 }
