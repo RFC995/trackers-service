@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -e
+adduser --system --group --home /var/lib/loctrkd loctrkd
+install --owner loctrkd --group loctrkd --directory /var/lib/opencellid
+
+#DEBHELPER#
+
+exit 0

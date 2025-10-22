@@ -1,0 +1,2 @@
+debian/loctrkd.conf etc/
+webdemo/index.html var/lib/loctrkd/

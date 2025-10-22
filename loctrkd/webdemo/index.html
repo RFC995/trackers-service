@@ -1,0 +1,347 @@
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en-US" xml:lang="en-US">
+<head>
+<title>Location</title>
+<!-- This uses reeeally old 2.13.1 from 2013, also part of Debian distro -->
+<script src="http://www.openlayers.org/api/OpenLayers.js">
+</script>
+<script src="https://www.openstreetmap.org/openlayers/OpenStreetMap.js">
+</script>
+<script type="text/javascript">
+	const urlParams = new URLSearchParams(window.location.search);
+	const qimei = urlParams.get("imei");
+
+	const wsproto = window.location.protocol === "https" ? "wss" : "ws";
+	const wshost = window.location.hostname ? window.location.hostname
+						: "localhost";
+	const wsport = window.location.port ? window.location.port : 5049;
+	const limei = window.location.pathname.substring(1)
+
+	const imeis = new Set();
+	const locations = new Array();
+	const maxmarkers = 5;
+	const lineStyle = {
+		strokeColor: '#0000ff',
+		strokeOpacity: 0.5,
+		strokeWidth: 5
+	};
+
+	var sts;
+	var ws;
+	var imei;
+	var imeilst;
+	var clear;
+	var subunsub;
+	var tstamp;
+	var map;
+	var line;
+	var markers;
+	var icon;
+
+	function init() {
+		init_map();
+		sts = document.getElementById("sts");
+		sts.innerHTML = "uninitialized";
+		imei = document.getElementById("imei");
+		imeilst = document.getElementById("imeilst");
+		clear = document.getElementById("clear");
+		subunsub = document.getElementById("subunsub");
+		refresh = document.getElementById("refresh");
+		msgtxt = document.getElementById("msgtxt");
+		message = document.getElementById("message");
+		poweroff = document.getElementById("poweroff");
+		devstatus = document.getElementById("devstatus");
+		tstamp = document.getElementById("tstamp");
+		if (qimei) {
+			imeis.add(qimei);
+		} else if (limei) {
+			imeis.add(limei);
+		}
+		update_imeilst(imeis);
+		change(imei)
+		open_ws();
+	}
+
+	function init_map() {
+		map = new OpenLayers.Map ("map", {
+			controls:[
+				new OpenLayers.Control.Navigation(),
+				new OpenLayers.Control.PanZoomBar(),
+				new OpenLayers.Control.LayerSwitcher(),
+				new OpenLayers.Control.Attribution()],
+			maxExtent: new OpenLayers.Bounds(
+				-20037508.34,-20037508.34,
+				20037508.34,20037508.34),
+			maxResolution: 156543.0399,
+			numZoomLevels: 19,
+			units: 'm',
+			projection: new OpenLayers.Projection(
+						"EPSG:900913"),
+			displayProjection: new OpenLayers.Projection(
+						"EPSG:4326")
+		});
+		layerMapnik =
+		  new OpenLayers.Layer.OSM.Mapnik("Mapnik");
+		map.addLayer(layerMapnik)
+		layerTransportMap =
+		  new OpenLayers.Layer.OSM.TransportMap("TransportMap");
+		map.addLayer(layerTransportMap)
+		layerCycleMap =
+		  new OpenLayers.Layer.OSM.CycleMap("CycleMap");
+		map.addLayer(layerCycleMap);
+		line =
+		  new OpenLayers.Layer.Vector("Line Layer");
+		map.addLayer(line);
+		map.addControl(new
+		  OpenLayers.Control.DrawFeature(line,
+				  OpenLayers.Handler.Path));
+		markers =
+		  new OpenLayers.Layer.Markers("Markers");
+		map.addLayer(markers);
+
+		var size = new OpenLayers.Size(21, 25);
+		var offset = new OpenLayers.Pixel(-(size.w/2), -size.h);
+		icon = new OpenLayers.Icon(
+'https://www.openstreetmap.org/openlayers/img/marker.png',size,offset);
+
+		var lonLat =
+		  new OpenLayers.LonLat(0, 0).transform(
+		    new OpenLayers.Projection("EPSG:4326"),
+		      map.getProjectionObject());
+		map.setCenter(lonLat, 1);
+	}
+
+	function set_marker(msg) {
+		if (locations.push(msg) > maxmarkers) {
+			locations.shift();
+		}
+		console.log("new marker list " + JSON.stringify(locations));
+		tstamp.innerHTML = msg.timestamp;
+		// Draw a line between backlog locations
+		for (var i = 1; i < locations.length; i++) {
+			const p0 =
+			  new OpenLayers.Geometry.Point(
+				locations[i-1].longitude,
+				locations[i-1].latitude)
+                             .transform(new OpenLayers.Projection("EPSG:4326"),
+					     map.getProjectionObject());
+			const p1 =
+			  new OpenLayers.Geometry.Point(
+				locations[i].longitude,
+				locations[i].latitude)
+                             .transform(new OpenLayers.Projection("EPSG:4326"),
+					     map.getProjectionObject());
+			const leg =
+			  new OpenLayers.Geometry.LineString([p0, p1]);
+			const lineFeature =
+			  new OpenLayers.Feature.Vector(leg, null, lineStyle);
+			line.addFeatures([lineFeature]);
+
+		}
+		// Set marker at the reported (last) location
+		const lonLat = new OpenLayers.LonLat(+msg.longitude,
+				  +msg.latitude).transform(
+		    new OpenLayers.Projection("EPSG:4326"),
+		      map.getProjectionObject());
+		markers.addMarker(new OpenLayers.Marker(lonLat, icon));
+		map.setCenter(lonLat, 14);
+	}
+	function display_status(battery) {
+		console.log("status " + battery);
+		devstatus.innerHTML = "BAT: " + battery;
+	}
+	function display_cmdresult(result) {
+		console.log("cmdresult " + result);
+		devstatus.innerHTML = result;
+	}
+
+	function open_ws() {
+		wsurl = new URL("ws://localhost/");
+		wsurl.protocol = wsproto
+		wsurl.hostname = wshost
+		wsurl.port = wsport
+		console.log("wsurl is " + wsurl)
+		ws = new WebSocket(wsurl);
+		ws.onopen = ws_onopen;
+		ws.onmessage = ws_onmessage;
+		ws.onerror = ws_onerror;
+		ws.onclose = ws_onclose;
+	}
+	function ws_onopen(event) {
+		console.log("ws opened " + event);
+		sts.innerHTML = "online";
+		imei.disabled = false;
+		clear.disabled = false;
+		change(imei);
+		locations.splice(0);
+		sendIMEI();
+	}
+	function ws_onmessage(event) {
+		console.log("message " + event.data);
+		msg = JSON.parse(event.data);
+		if (msg.type === "location") {
+			set_marker(msg);
+			if (msg.battery_percentage) {
+				display_status(msg.battery_percentage);
+			}
+		} else if (msg.type === "status") {
+			display_status(msg.battery);
+		} else if (msg.type === "cmdresult") {
+			display_cmdresult(msg.result);
+		}
+
+	}
+	function ws_onerror(event) {
+		console.log("error " + event);
+		sts.innerHTML = "error: " + event;
+	}
+	function ws_onclose(event) {
+		console.log("close " + event);
+		sts.innerHTML = "offline";
+		imei.disabled = true;
+		disablebtns(true);
+		clear.disabled = true;
+		setTimeout(open_ws, 5000);
+	}
+
+	function sendIMEI() {
+		const imstr = Array.from(imeis).join(",");
+		document.title = imstr;
+		var msg = {
+			imei: Array.from(imeis),
+			type: "subscribe",
+			timestamp: Date.now(),
+			backlog: maxmarkers
+		};
+		console.log("sending" + JSON.stringify(msg));
+		ws.send(JSON.stringify(msg));
+	}
+
+	function sendCMD(cmd, imei, txt) {
+		var msg = {
+			imei: imei,
+			type: cmd,
+			timestamp: Date.now(),
+			txt: txt
+		};
+		console.log("sending" + JSON.stringify(msg));
+		ws.send(JSON.stringify(msg));
+	}
+
+	function handleKey(evt) {
+		if (evt.keyCode === 13 || evt.keyCode === 14) {
+			if (!imei.disabled) {
+				sendIMEI(false);
+			}
+		}
+	}
+
+	function change(obj) {
+		if (obj.value) {
+			disablebtns(false);
+			if (imeis.has(obj.value)) {
+				subunsub.value = "-";
+				subunsub.title =
+				"Unsubscribe from notifications from "
+					+ obj.value;
+			} else {
+				subunsub.value = "+";
+				subunsub.title =
+				"Subscribe to notifications from "
+					+ obj.value;
+			}
+		} else {
+			disablebtns(true);
+			subunsub.value = "o";
+			subunsub.title = "";
+		}
+	}
+
+	function erase(obj) {
+		imei.value = "";
+		change(imei);
+	}
+
+	function disablebtns(yesorno) {
+		[subunsub, refresh, msgtxt, message,
+		 poweroff].forEach(function(obj) {
+			obj.disabled = yesorno;
+		})
+	}
+	function update_imeilst(imeis) {
+		while (imeilst.firstChild) {
+			imeilst.removeChild(imeilst.lastChild)
+		}
+		imeis.forEach(function(item) {
+			var entry = document.createElement('option');
+			entry.value = item;
+			imeilst.appendChild(entry);
+		})
+		if (imeis.size == 1) {
+			imei.value = imeis.values().next().value;
+		} else {
+			imei.value = "";
+		}
+	}
+
+	function buttonpress(obj) {
+		console.log("button value " + obj.value);
+		console.log("button id " + obj.id);
+		console.log("input value " + imei.value);
+		if (obj.id === "subunsub") {
+			if (obj.value === "+") {
+				imeis.add(imei.value);
+			} else if (obj.value === "-") {
+				imeis.delete(imei.value);
+				imei.value = "";
+			}
+			update_imeilst(imeis);
+			change(imei);
+			sendIMEI();
+		} else {
+			sendCMD(obj.id, imei.value, msgtxt.value);
+			msgtxt.value = "";
+		}
+	}
+</script>
+
+</head>
+<body onload="init();" style="height: 100%; margin: 0; display: flex;
+				flex-direction: column; font-size: 1.5vh;">
+	<div style="margin: 0;" id="hdr">
+		<input id="imei" type="text" name="imei"
+		 size="16" maxlength="16" placeholder="Enter or click to choose"
+		 list="imeilst"
+		 oninput ="change(this)" onkeyup="handleKey(event)" />
+		<datalist id="imeilst"></datalist>
+		<input type="button" id="clear" name="clear" value="x"
+		 title="Clear input (Click on empty input shows avaliable choices)"
+		 onclick="erase(this)" />
+		<input type="button" id="subunsub" name="subunsub" value="+"
+		 title="Unsubscribe from events from IMEI"
+		 onclick="buttonpress(this)" />
+		<input type="button" id="refresh" name="refresh" value="Refresh"
+		 title="Send request to refresh location"
+		 onclick="buttonpress(this)" />
+		<input id="msgtxt" type="text" name="msgtxt"
+		 size="80" maxlength="80" placeholder="Input message text"
+		 onkeyup="handleKey(event)" />
+		<input type="button" id="message" name="message" value="Send"
+		 title="Send message"
+		 onclick="buttonpress(this)" />
+		<input type="button" id="poweroff" name="poweroff" value="Off"
+		 title="Send request to power off"
+		 style="background: red;"
+		 onclick="buttonpress(this)" />
+		<br />
+	</div>
+	<div style="flex-grow: 1;" id="map"></div>
+	<div style="display: flex; flex-direction: row; width: 100%;">
+		<div id="sts" style="flex: none;"></div>
+		| <div id="devstatus" style="flex: auto;"></div>
+		| <div id="tstamp" style="flex: auto;"></div>
+		| <div id="about" style="flex: none; font-size: 1.5vmin;">
+			<a href="http://www.average.org/loctrkd/">
+				http://www.average.org/loctrkd/</a></div>
+	</div>
+</body>
+</html>
